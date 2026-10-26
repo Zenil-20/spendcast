@@ -1,0 +1,714 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Expense Forecast</title>
+<style>
+  :root {
+    color-scheme: light;
+    --page: #f9f9f7;
+    --surface-1: #fcfcfb;
+    --surface-2: #f3f2ee;
+    --text-primary: #0b0b0b;
+    --text-secondary: #52514e;
+    --text-muted: #898781;
+    --grid: #e1e0d9;
+    --axis: #c3c2b7;
+    --border: rgba(11, 11, 11, 0.10);
+    --series-recurring: #2a78d6;
+    --series-variable: #eb6834;
+    --status-good: #0ca30c;
+    --status-warning: #fab219;
+    --status-critical: #d03b3b;
+    --accent: #2a78d6;
+    --accent-text: #ffffff;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      color-scheme: dark;
+      --page: #0d0d0d;
+      --surface-1: #1a1a19;
+      --surface-2: #222220;
+      --text-primary: #f0efec;
+      --text-secondary: #c3c2b7;
+      --text-muted: #898781;
+      --grid: #2c2c2a;
+      --axis: #383835;
+      --border: rgba(255, 255, 255, 0.10);
+      --series-recurring: #3987e5;
+      --series-variable: #d95926;
+      --accent: #3987e5;
+    }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --page: #0d0d0d;
+    --surface-1: #1a1a19;
+    --surface-2: #222220;
+    --text-primary: #f0efec;
+    --text-secondary: #c3c2b7;
+    --text-muted: #898781;
+    --grid: #2c2c2a;
+    --axis: #383835;
+    --border: rgba(255, 255, 255, 0.10);
+    --series-recurring: #3987e5;
+    --series-variable: #d95926;
+    --accent: #3987e5;
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--page);
+    color: var(--text-primary);
+    font: 14px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  main { max-width: 1120px; margin: 0 auto; padding: 24px 16px 48px; }
+  h1 { font-size: 22px; margin: 0; font-weight: 600; }
+  h2 { font-size: 16px; margin: 0 0 4px; font-weight: 600; }
+  .muted { color: var(--text-muted); }
+  .secondary { color: var(--text-secondary); }
+  .card {
+    background: var(--surface-1);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 16px;
+  }
+  .stack > * + * { margin-top: 16px; }
+
+  header.top { display: flex; flex-wrap: wrap; gap: 12px; align-items: end; justify-content: space-between; }
+  .controls { display: flex; flex-wrap: wrap; gap: 8px; align-items: end; }
+  label.field { display: grid; gap: 4px; font-size: 12px; color: var(--text-secondary); }
+  input, select, button {
+    font: inherit;
+    color: var(--text-primary);
+    background: var(--surface-1);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 7px 10px;
+    min-height: 36px;
+  }
+  button { cursor: pointer; }
+  button.primary { background: var(--accent); color: var(--accent-text); border-color: transparent; font-weight: 600; }
+  button:focus-visible, input:focus-visible, select:focus-visible, [tabindex]:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  #login { max-width: 380px; margin: 48px auto; }
+  #login form { display: grid; gap: 12px; margin-top: 12px; }
+  .error { color: var(--status-critical); font-weight: 500; }
+
+  .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; }
+  .tile .label { font-size: 12px; color: var(--text-secondary); }
+  .tile .value { font-size: 26px; font-weight: 600; margin: 2px 0; }
+  .tile .hero { font-size: 48px; line-height: 1.1; }
+  .tile .sub { font-size: 12px; color: var(--text-secondary); }
+
+  .status { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; color: var(--text-primary); }
+  .status .icon {
+    display: inline-grid; place-items: center;
+    width: 16px; height: 16px; border-radius: 50%;
+    font-size: 11px; line-height: 1; color: #ffffff;
+  }
+  .status.within_budget .icon { background: var(--status-good); }
+  .status.at_risk .icon { background: var(--status-warning); color: #0b0b0b; }
+  .status.over_budget .icon { background: var(--status-critical); }
+  .status.budget_not_set .icon { background: var(--text-muted); }
+
+  .legend { display: flex; flex-wrap: wrap; gap: 16px; font-size: 12px; color: var(--text-secondary); margin: 8px 0 4px; }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .swatch { width: 12px; height: 12px; border-radius: 3px; display: inline-block; }
+  .key-line { width: 16px; height: 0; border-top: 1px solid var(--text-secondary); display: inline-block; }
+  .key-whisker { width: 2px; height: 12px; background: var(--text-secondary); display: inline-block; position: relative; }
+
+  .chart-wrap { position: relative; overflow-x: auto; }
+  svg text { font: 11px system-ui, -apple-system, "Segoe UI", sans-serif; fill: var(--text-muted); font-variant-numeric: tabular-nums; }
+  svg .hit { fill: transparent; cursor: default; }
+  svg .hit:hover, svg .hit:focus { fill: var(--text-primary); fill-opacity: 0.04; outline: none; }
+  .tooltip {
+    position: absolute; pointer-events: none; z-index: 2;
+    background: var(--surface-1); border: 1px solid var(--border); border-radius: 8px;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+    padding: 8px 10px; font-size: 12px; min-width: 190px; display: none;
+  }
+  .tooltip .title { color: var(--text-secondary); margin-bottom: 4px; }
+  .tooltip .row { display: flex; align-items: center; gap: 8px; justify-content: space-between; }
+  .tooltip .row .name { display: inline-flex; align-items: center; gap: 6px; color: var(--text-secondary); }
+  .tooltip .row strong { font-variant-numeric: tabular-nums; }
+  .tooltip .line-key { width: 10px; height: 0; border-top: 2px solid; display: inline-block; }
+
+  .months { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; }
+  .month .total { font-size: 24px; font-weight: 600; }
+  .month dl { display: grid; grid-template-columns: 1fr auto; gap: 2px 12px; margin: 8px 0; font-size: 13px; }
+  .month dt { color: var(--text-secondary); }
+  .month dd { margin: 0; text-align: right; font-variant-numeric: tabular-nums; }
+  .month ul { list-style: none; padding: 0; margin: 8px 0 0; font-size: 12px; border-top: 1px solid var(--grid); }
+  .month li { display: flex; justify-content: space-between; gap: 8px; padding: 4px 0; border-bottom: 1px solid var(--grid); }
+
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { padding: 6px 8px; text-align: right; border-bottom: 1px solid var(--grid); font-variant-numeric: tabular-nums; white-space: nowrap; }
+  th:first-child, td:first-child { text-align: left; }
+  th { color: var(--text-secondary); font-weight: 500; }
+  .table-wrap { overflow-x: auto; }
+  details summary { cursor: pointer; color: var(--text-secondary); font-weight: 500; }
+  .notes { font-size: 12px; color: var(--text-secondary); padding-left: 18px; margin: 4px 0 0; }
+  .warning-box { border-left: 3px solid var(--status-warning); }
+  [hidden] { display: none !important; }
+
+  @media (max-width: 560px) {
+    .tile .hero { font-size: 40px; }
+  }
+</style>
+</head>
+<body>
+<main>
+  <section id="login" class="card" hidden>
+    <h1>Expense forecast</h1>
+    <p class="secondary">Sign in to see your spending forecast.</p>
+    <form id="login-form">
+      <label class="field">Email
+        <input id="email" type="email" autocomplete="username" required value="demo@forecast.local">
+      </label>
+      <label class="field">Password
+        <input id="password" type="password" autocomplete="current-password" required>
+      </label>
+      <button class="primary" type="submit">Sign in</button>
+      <p id="login-error" class="error" role="alert" hidden></p>
+    </form>
+  </section>
+
+  <section id="app" class="stack" hidden>
+    <header class="top">
+      <div>
+        <h1>Expense forecast</h1>
+        <div id="subtitle" class="secondary"></div>
+      </div>
+      <div class="controls">
+        <label class="field">Forecast
+          <select id="months">
+            <option value="3">Next 3 months</option>
+            <option value="6">Next 6 months</option>
+            <option value="12">Next 12 months</option>
+          </select>
+        </label>
+        <label class="field" title="Needs ENABLE_TEST_CLOCK=true on the server">As of (test clock)
+          <input id="as-of" type="datetime-local">
+        </label>
+        <button id="refresh" type="button">Refresh</button>
+        <button id="sign-out" type="button">Sign out</button>
+      </div>
+    </header>
+
+    <p id="app-error" class="error" role="alert" hidden></p>
+    <div id="empty" class="card" hidden></div>
+
+    <div id="content" class="stack" hidden>
+      <div id="warnings" class="card warning-box" hidden>
+        <h2>Warnings</h2>
+        <ul id="warning-list" class="notes"></ul>
+      </div>
+
+      <div class="tiles" id="tiles"></div>
+
+      <div class="card">
+        <h2>Monthly spending: actual and forecast</h2>
+        <div class="secondary" style="font-size:12px">Last 12 months, this month so far plus projection, then the forecast. Lighter columns are estimates.</div>
+        <div class="legend">
+          <span><i class="swatch" style="background:var(--series-recurring)"></i>Recurring</span>
+          <span><i class="swatch" style="background:var(--series-variable)"></i>Variable</span>
+          <span><i class="swatch" style="background:var(--series-variable);opacity:.4"></i>Projected / forecast</span>
+          <span><i class="key-whisker"></i>80% range</span>
+          <span><i class="key-line"></i>Monthly budget</span>
+        </div>
+        <div class="chart-wrap" id="chart-wrap">
+          <svg id="chart" role="img" aria-label="Monthly spending chart"></svg>
+          <div class="tooltip" id="tooltip"></div>
+        </div>
+      </div>
+
+      <div>
+        <h2 id="months-title">Next months</h2>
+        <div class="months" id="month-cards"></div>
+      </div>
+
+      <div class="card">
+        <details>
+          <summary>Show all months as a table</summary>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr><th>Month</th><th>Type</th><th>Recurring</th><th>Variable</th><th>Total</th><th>80% range</th><th>Budget status</th></tr>
+              </thead>
+              <tbody id="table-body"></tbody>
+            </table>
+          </div>
+        </details>
+      </div>
+
+      <div class="card">
+        <h2>How this forecast works</h2>
+        <div id="method" class="secondary" style="font-size:13px"></div>
+        <ul id="limitations" class="notes"></ul>
+      </div>
+    </div>
+  </section>
+</main>
+
+<script>
+(() => {
+  const API = "/api/v1";
+  const TOKEN_KEY = "forecastToken";
+  const STATUS_LABELS = {
+    within_budget: ["✓", "Within budget"],
+    at_risk: ["!", "At risk"],
+    over_budget: ["✕", "Over budget"],
+    budget_not_set: ["–", "No budget set"]
+  };
+
+  const $ = id => document.getElementById(id);
+  let lastData = null;
+
+  const storage = {
+    get() { try { return sessionStorage.getItem(TOKEN_KEY); } catch { return null; } },
+    set(value) { try { sessionStorage.setItem(TOKEN_KEY, value); } catch { /* storage unavailable */ } },
+    clear() { try { sessionStorage.removeItem(TOKEN_KEY); } catch { /* storage unavailable */ } }
+  };
+
+  let token = storage.get();
+
+  // Small DOM helper. Text always goes through textContent, never innerHTML.
+  function el(tag, attrs = {}, children = []) {
+    const node = document.createElement(tag);
+    for (const [key, value] of Object.entries(attrs)) {
+      if (key === "text") node.textContent = value;
+      else if (key === "class") node.className = value;
+      else node.setAttribute(key, value);
+    }
+    for (const child of [].concat(children)) {
+      if (child !== null && child !== undefined) node.append(child);
+    }
+    return node;
+  }
+
+  function svg(tag, attrs = {}) {
+    const node = document.createElementNS("http://www.w3.org/2000/svg", tag);
+    for (const [key, value] of Object.entries(attrs)) node.setAttribute(key, value);
+    return node;
+  }
+
+  function money(value, currency, compact = false) {
+    if (value === null || value === undefined) return "—";
+    return new Intl.NumberFormat(undefined, {
+      style: "currency",
+      currency,
+      notation: compact ? "compact" : "standard",
+      maximumFractionDigits: compact ? 1 : undefined
+    }).format(value);
+  }
+
+  function statusBadge(status) {
+    const [icon, label] = STATUS_LABELS[status] || STATUS_LABELS.budget_not_set;
+    return el("span", { class: `status ${status}` }, [
+      el("span", { class: "icon", "aria-hidden": "true", text: icon }),
+      label
+    ]);
+  }
+
+  function showError(id, message) {
+    const node = $(id);
+    node.textContent = message || "";
+    node.hidden = !message;
+  }
+
+  async function api(path, options = {}) {
+    const headers = { "Content-Type": "application/json" };
+    if (token) headers.Authorization = `Bearer ${token}`;
+    const asOf = $("as-of").value;
+    if (asOf) headers["X-Test-Now"] = new Date(asOf).toISOString();
+
+    const response = await fetch(API + path, { ...options, headers });
+    const body = await response.json().catch(() => ({}));
+
+    if (response.status === 401 && path !== "/auth/login") {
+      signOut();
+      throw new Error("Your session expired. Please sign in again.");
+    }
+    if (!response.ok) throw new Error(body.error || `Request failed (${response.status}).`);
+    return body;
+  }
+
+  function signOut() {
+    token = null;
+    storage.clear();
+    $("app").hidden = true;
+    $("login").hidden = false;
+  }
+
+  async function signIn(event) {
+    event.preventDefault();
+    showError("login-error", "");
+    try {
+      const body = await api("/auth/login", {
+        method: "POST",
+        body: JSON.stringify({ email: $("email").value, password: $("password").value })
+      });
+      token = body.token;
+      storage.set(token);
+      $("password").value = "";
+      await load();
+    } catch (error) {
+      showError("login-error", error.message);
+    }
+  }
+
+  async function load() {
+    $("login").hidden = true;
+    $("app").hidden = false;
+    showError("app-error", "");
+    try {
+      const data = await api(`/forecast?months=${$("months").value}`);
+      lastData = data;
+      render(data);
+    } catch (error) {
+      if (token) showError("app-error", error.message);
+    }
+  }
+
+  // Builds one column per month: history, the current month, then forecasts.
+  function buildColumns(data) {
+    const history = data.monthlyHistory.slice(-12).map(m => ({
+      kind: "Actual",
+      label: m.monthLabel,
+      month: m.month,
+      recurring: m.recurringExpenditure,
+      variable: m.variableExpenditure,
+      total: m.totalExpenditure
+    }));
+
+    const c = data.currentMonth;
+    const current = {
+      kind: "This month",
+      label: c.monthLabel,
+      month: c.month,
+      recurring: c.recurringSpentSoFar,
+      variable: c.variableSpentSoFar,
+      projectedRecurring: c.upcomingRecurringExpenditure,
+      projectedVariable: c.expectedRemainingVariableExpenditure,
+      total: c.projectedTotalExpenditure,
+      spent: c.spentSoFar,
+      range: c.projectedTotalRange,
+      status: c.budgetStatus
+    };
+
+    const forecast = data.forecast.map(m => ({
+      kind: "Forecast",
+      label: m.monthLabel,
+      month: m.month,
+      projectedRecurring: m.expectedRecurringExpenditure,
+      projectedVariable: m.estimatedVariableExpenditure,
+      recurring: 0,
+      variable: 0,
+      total: m.estimatedTotalExpenditure,
+      range: m.estimatedTotalRange,
+      status: m.budgetStatus
+    }));
+
+    return [...history, current, ...forecast];
+  }
+
+  function niceMax(value) {
+    const exponent = Math.pow(10, Math.floor(Math.log10(value)));
+    const fraction = value / exponent;
+    const nice = fraction <= 1 ? 1 : fraction <= 2 ? 2 : fraction <= 2.5 ? 2.5 : fraction <= 5 ? 5 : 10;
+    return nice * exponent;
+  }
+
+  // Column with a 4px rounded top and a square base.
+  function columnPath(x, y, width, height, radius) {
+    const r = Math.min(radius, height, width / 2);
+    return `M${x},${y + height}V${y + r}Q${x},${y} ${x + r},${y}H${x + width - r}Q${x + width},${y} ${x + width},${y + r}V${y + height}Z`;
+  }
+
+  function renderChart(data) {
+    const chart = $("chart");
+    const wrap = $("chart-wrap");
+    const tooltip = $("tooltip");
+    const columns = buildColumns(data);
+    const currency = data.currency;
+    const budget = data.currentMonth.budget;
+
+    const width = Math.max(wrap.clientWidth, columns.length * 40 + 70);
+    const height = 320;
+    // The right margin holds the budget label, clear of the columns.
+    const margin = { top: 16, right: budget ? 84 : 16, bottom: 40, left: 56 };
+    const plotWidth = width - margin.left - margin.right;
+    const plotHeight = height - margin.top - margin.bottom;
+
+    const peak = Math.max(
+      budget || 0,
+      ...columns.map(c => Math.max(c.total, c.range ? c.range.high : 0))
+    );
+    const yMax = niceMax(peak * 1.05);
+    const y = value => margin.top + plotHeight - (value / yMax) * plotHeight;
+    const slot = plotWidth / columns.length;
+    const barWidth = Math.min(24, slot * 0.6);
+    const GAP = 2;
+
+    chart.replaceChildren();
+    chart.setAttribute("width", width);
+    chart.setAttribute("height", height);
+    chart.setAttribute("viewBox", `0 0 ${width} ${height}`);
+
+    // Background band behind the projected/forecast columns.
+    const firstEstimate = columns.findIndex(c => c.kind !== "Actual");
+    chart.append(svg("rect", {
+      x: margin.left + firstEstimate * slot, y: margin.top,
+      width: plotWidth - firstEstimate * slot, height: plotHeight,
+      fill: "var(--surface-2)"
+    }));
+    const bandLabel = svg("text", { x: margin.left + firstEstimate * slot + 6, y: margin.top + 12 });
+    bandLabel.textContent = "Projection";
+    chart.append(bandLabel);
+
+    // Gridlines and y-axis ticks.
+    for (let i = 0; i <= 4; i++) {
+      const value = (yMax / 4) * i;
+      const lineY = y(value);
+      chart.append(svg("line", {
+        x1: margin.left, x2: width - margin.right, y1: lineY, y2: lineY,
+        stroke: i === 0 ? "var(--axis)" : "var(--grid)", "stroke-width": 1
+      }));
+      const tick = svg("text", { x: margin.left - 8, y: lineY + 4, "text-anchor": "end" });
+      tick.textContent = money(value, currency, true);
+      chart.append(tick);
+    }
+
+    columns.forEach((column, index) => {
+      const x = margin.left + index * slot + (slot - barWidth) / 2;
+      const segments = [
+        { value: column.recurring, color: "var(--series-recurring)", opacity: 1 },
+        { value: column.variable, color: "var(--series-variable)", opacity: 1 },
+        { value: column.projectedRecurring || 0, color: "var(--series-recurring)", opacity: 0.4 },
+        { value: column.projectedVariable || 0, color: "var(--series-variable)", opacity: 0.4 }
+      ].filter(segment => segment.value > 0);
+
+      let base = 0;
+      segments.forEach((segment, segmentIndex) => {
+        const top = y(base + segment.value);
+        const bottom = y(base) - (segmentIndex > 0 ? GAP : 0);
+        const segmentHeight = Math.max(0, bottom - top);
+        const isTop = segmentIndex === segments.length - 1;
+        chart.append(svg("path", {
+          d: isTop
+            ? columnPath(x, top, barWidth, segmentHeight, 4)
+            : `M${x},${top}h${barWidth}v${segmentHeight}h${-barWidth}Z`,
+          fill: segment.color,
+          "fill-opacity": segment.opacity
+        }));
+        base += segment.value;
+      });
+
+      // 80% range whisker for estimated columns.
+      if (column.range) {
+        const center = x + barWidth / 2;
+        const whisker = { stroke: "var(--text-secondary)", "stroke-width": 1.5 };
+        chart.append(svg("line", { x1: center, x2: center, y1: y(column.range.high), y2: y(column.range.low), ...whisker }));
+        chart.append(svg("line", { x1: center - 5, x2: center + 5, y1: y(column.range.high), y2: y(column.range.high), ...whisker }));
+        chart.append(svg("line", { x1: center - 5, x2: center + 5, y1: y(column.range.low), y2: y(column.range.low), ...whisker }));
+      }
+
+      // Month labels: short month, plus the year in January and on the first column.
+      const [monthName, year] = column.label.split(" ");
+      const label = svg("text", { x: x + barWidth / 2, y: height - margin.bottom + 16, "text-anchor": "middle" });
+      label.textContent = monthName;
+      chart.append(label);
+      if (column.month === 1 || index === 0) {
+        const yearLabel = svg("text", { x: x + barWidth / 2, y: height - margin.bottom + 30, "text-anchor": "middle" });
+        yearLabel.textContent = year;
+        chart.append(yearLabel);
+      }
+
+      // Hover / focus target: the whole column slot.
+      const hit = svg("rect", {
+        class: "hit", x: margin.left + index * slot, y: margin.top,
+        width: slot, height: plotHeight, tabindex: 0,
+        "aria-label": `${column.label} ${column.kind}: ${money(column.total, currency)}`
+      });
+      const show = () => showTooltip(column, x + barWidth / 2, y(column.range ? column.range.high : column.total));
+      hit.addEventListener("pointerenter", show);
+      hit.addEventListener("focus", show);
+      hit.addEventListener("pointerleave", () => { tooltip.style.display = "none"; });
+      hit.addEventListener("blur", () => { tooltip.style.display = "none"; });
+      chart.append(hit);
+    });
+
+    // Budget reference line, labeled at the right end.
+    if (budget) {
+      const budgetY = y(budget);
+      chart.append(svg("line", {
+        x1: margin.left, x2: width - margin.right, y1: budgetY, y2: budgetY,
+        stroke: "var(--text-secondary)", "stroke-width": 1
+      }));
+      const budgetLabel = svg("text", { x: width - margin.right + 6, y: budgetY + 4 });
+      budgetLabel.style.fill = "var(--text-secondary)";
+      budgetLabel.textContent = `Budget ${money(budget, currency, true)}`;
+      chart.append(budgetLabel);
+    }
+
+    function showTooltip(column, centerX, topY) {
+      const rows = [];
+      const row = (name, value, color) => el("div", { class: "row" }, [
+        el("span", { class: "name" }, [
+          color ? el("i", { class: "line-key", style: `border-color:${color}` }) : null,
+          name
+        ]),
+        el("strong", { text: money(value, currency) })
+      ]);
+
+      if (column.kind === "Actual") {
+        rows.push(row("Total", column.total));
+        rows.push(row("Recurring", column.recurring, "var(--series-recurring)"));
+        rows.push(row("Variable", column.variable, "var(--series-variable)"));
+      } else if (column.kind === "This month") {
+        rows.push(row("Projected total", column.total));
+        rows.push(row("Spent so far", column.spent));
+        rows.push(row("Recurring still due", column.projectedRecurring, "var(--series-recurring)"));
+        rows.push(row("Variable still expected", column.projectedVariable, "var(--series-variable)"));
+      } else {
+        rows.push(row("Estimated total", column.total));
+        rows.push(row("Recurring", column.projectedRecurring, "var(--series-recurring)"));
+        rows.push(row("Variable", column.projectedVariable, "var(--series-variable)"));
+      }
+      if (column.range) {
+        rows.push(el("div", { class: "row" }, [
+          el("span", { class: "name", text: "80% range" }),
+          el("strong", { text: `${money(column.range.low, currency, true)} – ${money(column.range.high, currency, true)}` })
+        ]));
+      }
+
+      tooltip.replaceChildren(
+        el("div", { class: "title", text: `${column.label} · ${column.kind}` }),
+        ...rows,
+        column.status ? el("div", { style: "margin-top:6px" }, [statusBadge(column.status)]) : null
+      );
+      tooltip.style.display = "block";
+      const left = Math.min(Math.max(centerX - tooltip.offsetWidth / 2, 0), width - tooltip.offsetWidth);
+      tooltip.style.left = `${left}px`;
+      tooltip.style.top = `${Math.max(topY - tooltip.offsetHeight - 10, 0)}px`;
+    }
+  }
+
+  function tile(label, value, sub, extra, hero = false) {
+    return el("div", { class: "card tile" }, [
+      el("div", { class: "label", text: label }),
+      el("div", { class: hero ? "value hero" : "value", text: value }),
+      sub ? el("div", { class: "sub", text: sub }) : null,
+      extra ? el("div", { style: "margin-top:6px" }, [extra]) : null
+    ]);
+  }
+
+  function render(data) {
+    const currency = data.currency;
+    $("subtitle").textContent = `${data.timezone} · ${currency} · as of ${data.asOf}`;
+
+    const warnings = data.warnings || [];
+    $("warnings").hidden = warnings.length === 0;
+    $("warning-list").replaceChildren(...warnings.map(text => el("li", { text })));
+
+    if (!data.forecast) {
+      $("content").hidden = false;
+      $("empty").hidden = false;
+      $("empty").textContent = data.message;
+      for (const id of ["tiles", "month-cards", "table-body"]) $(id).replaceChildren();
+      $("chart").replaceChildren();
+      return;
+    }
+    $("empty").hidden = true;
+    $("content").hidden = false;
+
+    const current = data.currentMonth;
+    const next = data.forecast[0];
+    const overCount = data.forecast.filter(m => m.budgetStatus === "over_budget").length;
+    const accuracy = data.accuracy;
+
+    $("tiles").replaceChildren(
+      tile(
+        `${current.monthLabel}: projected total`,
+        money(current.projectedTotalExpenditure, currency),
+        `${money(current.spentSoFar, currency)} spent so far · ${current.daysElapsed} of ${current.daysInMonth} days`,
+        statusBadge(current.budgetStatus),
+        true
+      ),
+      tile(
+        `${next.monthLabel}: forecast`,
+        money(next.estimatedTotalExpenditure, currency),
+        `80% range ${money(next.estimatedTotalRange.low, currency, true)} – ${money(next.estimatedTotalRange.high, currency, true)}`,
+        statusBadge(next.budgetStatus)
+      ),
+      tile(
+        "Monthly budget",
+        money(current.budget, currency),
+        current.budget === null
+          ? "Set a budget to compare forecasts with it"
+          : `${overCount} of the next ${data.forecast.length} months forecast over budget`
+      ),
+      tile(
+        "Model accuracy (backtest)",
+        accuracy ? `${accuracy.weightedAbsolutePercentageError}% error` : "Not enough history",
+        accuracy
+          ? `Typical miss ${money(accuracy.meanAbsoluteError, currency, true)} over ${accuracy.evaluatedMonths} past months · ${data.dataCoverage} data coverage`
+          : `${data.dataCoverage} data coverage`
+      )
+    );
+
+    $("months-title").textContent = `Next ${data.forecast.length} months`;
+    $("month-cards").replaceChildren(...data.forecast.map(m => el("div", { class: "card month" }, [
+      el("div", { class: "secondary", text: m.monthLabel }),
+      el("div", { class: "total", text: money(m.estimatedTotalExpenditure, currency) }),
+      statusBadge(m.budgetStatus),
+      el("dl", {}, [
+        el("dt", { text: "Variable" }), el("dd", { text: money(m.estimatedVariableExpenditure, currency) }),
+        el("dt", { text: "Recurring" }), el("dd", { text: money(m.expectedRecurringExpenditure, currency) }),
+        el("dt", { text: "80% range" }), el("dd", { text: `${money(m.estimatedTotalRange.low, currency, true)} – ${money(m.estimatedTotalRange.high, currency, true)}` }),
+        el("dt", { text: "Budget left" }), el("dd", { text: money(m.budgetDifference, currency) }),
+        m.seasonalFactor !== 1 ? el("dt", { text: "Seasonal effect" }) : null,
+        m.seasonalFactor !== 1 ? el("dd", { text: `${m.seasonalFactor > 1 ? "+" : ""}${Math.round((m.seasonalFactor - 1) * 100)}%` }) : null
+      ]),
+      el("ul", {}, m.recurringPayments.map(p => el("li", {}, [
+        el("span", { text: `${p.title} · ${p.dueDate.slice(8)} ${m.monthLabel.split(" ")[0]}` }),
+        el("span", { text: money(p.amount, currency) })
+      ])))
+    ])));
+
+    const rows = buildColumns(data).map(c => el("tr", {}, [
+      el("td", { text: c.label }),
+      el("td", { text: c.kind }),
+      el("td", { text: money(c.recurring + (c.projectedRecurring || 0), currency) }),
+      el("td", { text: money(c.variable + (c.projectedVariable || 0), currency) }),
+      el("td", { text: money(c.total, currency) }),
+      el("td", { text: c.range ? `${money(c.range.low, currency)} – ${money(c.range.high, currency)}` : "—" }),
+      el("td", {}, [c.status ? statusBadge(c.status) : "—"])
+    ]));
+    $("table-body").replaceChildren(...rows);
+
+    $("method").textContent = data.method;
+    $("limitations").replaceChildren(...data.limitations.map(text => el("li", { text })));
+
+    renderChart(data);
+  }
+
+  $("login-form").addEventListener("submit", signIn);
+  $("sign-out").addEventListener("click", signOut);
+  $("refresh").addEventListener("click", load);
+  $("months").addEventListener("change", load);
+
+  let resizeTimer;
+  window.addEventListener("resize", () => {
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(() => { if (lastData && lastData.forecast) renderChart(lastData); }, 150);
+  });
+
+  if (token) load(); else signOut();
+})();
+</script>
+</body>
+</html>
