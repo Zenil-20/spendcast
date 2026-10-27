@@ -4,7 +4,7 @@ import { useDeleteGoal, useGoalPreview, useGoals, useSaveGoal } from "../lib/que
 import { useDebounced } from "../lib/hooks";
 import { useToast } from "../lib/toast";
 import { addDays, formatDate, formatMoney, formatPercent, todayIn } from "../lib/format";
-import type { Goal, GoalInput, Holding } from "../lib/types";
+import type { Goal, GoalFixOption, GoalInput, GoalStatus, Holding } from "../lib/types";
 import { TimeChart } from "./TimeChart";
 import { Button, Dialog, Field, MoneyInput, Segmented, Skeleton } from "./ui";
 
@@ -103,6 +103,8 @@ function GoalCard({ goal, onEdit }: { goal: Goal; onEdit: () => void }) {
         </div>
       </div>
 
+      {goal.watch && <GoalWatchStrip goal={goal} />}
+
       {sim ? <GoalResult goal={goal} /> : <p className="small ink-2">The target date has passed. Edit the goal to set a new date.</p>}
 
       <Dialog
@@ -120,6 +122,53 @@ function GoalCard({ goal, onEdit }: { goal: Goal; onEdit: () => void }) {
         {null}
       </Dialog>
     </section>
+  );
+}
+
+const STATUS: Record<GoalStatus, { label: string; tone: string }> = {
+  on_track: { label: "On track", tone: "good" },
+  at_risk: { label: "At risk", tone: "mid" },
+  off_track: { label: "Off track", tone: "low" }
+};
+
+function fixText(option: GoalFixOption): string {
+  if (option.kind === "monthly") return `Add ${inr(option.amount)} a month (${inr(option.monthly)} in total)`;
+  if (option.kind === "topUp") return `Add ${inr(option.amount)} once, now`;
+  return `Move the date out ${option.months} month${option.months === 1 ? "" : "s"}${option.date ? `, to ${formatDate(option.date, { month: "short", year: "numeric" })}` : ""}`;
+}
+
+// Early warning: on track or not, how the odds moved, and the smallest change
+// that would bring the goal back to a 75% chance.
+function GoalWatchStrip({ goal }: { goal: Goal }) {
+  const watch = goal.watch!;
+  const status = STATUS[watch.status];
+  const { trend, fix } = watch;
+  const [primary, ...alternatives] = fix?.options ?? [];
+
+  return (
+    <div className={`goal-watch ${status.tone}`}>
+      <div className="row wrap" style={{ gap: 10 }}>
+        <span className={`status-pill ${status.tone}`}>{status.label}</span>
+        {trend.change !== null && trend.from && Math.abs(trend.change) >= 0.01 && (
+          <span className="small ink-2">
+            {trend.change > 0 ? "Up" : "Down"} {Math.round(Math.abs(trend.change) * 100)} points since {formatDate(trend.from, { day: "numeric", month: "short" })}
+          </span>
+        )}
+        {watch.status !== "on_track" && trend.behindDays > 1 && <span className="small ink-3">behind for {trend.behindDays} checks in a row</span>}
+      </div>
+
+      {primary && (
+        <div className="goal-fix">
+          <div><span className="small ink-3">Smallest change for a 75% chance: </span><b>{fixText(primary)}</b></div>
+          {alternatives.length > 0 && <div className="small ink-2">Or: {alternatives.map(fixText).join("; or ")}.</div>}
+          {goal.simulation && goal.simulation.shortfall.probability > 0 && (
+            <div className="small ink-3">
+              As things stand, replays that miss fall short by {inr(goal.simulation.shortfall.median, "compact")} typically, {inr(goal.simulation.shortfall.badCase, "compact")} in the bottom 10%. These are odds, not a promise of returns.
+            </div>
+          )}
+        </div>
+      )}
+    </div>
   );
 }
 

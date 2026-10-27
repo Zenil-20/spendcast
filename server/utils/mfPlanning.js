@@ -122,6 +122,7 @@ function simulateGoal({ funds = [], benchmark, today, targetDate, target, monthl
 
     const finals = new Float64Array(paths);
     const needed = new Float64Array(paths);
+    const topUps = new Float64Array(paths);
     const marks = yearMarks.map(() => new Float64Array(paths));
     const span = calendar.length;
     const block = Math.min(blockMonths, span);
@@ -147,11 +148,15 @@ function simulateGoal({ funds = [], benchmark, today, targetDate, target, monthl
         finals[p] = current * lumpGrowth + monthlyContribution * sipPot;
         // The monthly amount this path needs to hit the target exactly.
         needed[p] = sipPot > 0 ? Math.max(0, (target - current * lumpGrowth) / sipPot) : (current * lumpGrowth >= target ? 0 : Infinity);
+        // The one-time amount, added today, this path needs to hit the target.
+        topUps[p] = lumpGrowth > 0 ? Math.max(0, (target - monthlyContribution * sipPot) / lumpGrowth - current) : Infinity;
     }
 
     const sortedFinals = [...finals].sort((a, b) => a - b);
     const sortedNeeded = [...needed].sort((a, b) => a - b);
+    const sortedTopUps = [...topUps].sort((a, b) => a - b);
     const reached = sortedFinals.filter(value => value >= target).length;
+    const gaps = sortedFinals.filter(value => value < target).map(value => target - value).sort((a, b) => a - b);
 
     // What a flat-rate projection (the usual calculator) would promise.
     const monthlyRate = Math.pow(1 + flatRate, 1 / 12) - 1;
@@ -183,6 +188,18 @@ function simulateGoal({ funds = [], benchmark, today, targetDate, target, monthl
         },
         // Monthly amount needed for a given chance of success.
         neededMonthly: { odds50: needFor(0.5), odds75: needFor(0.75), odds90: needFor(0.9) },
+        // One-time amount added today, on top of the monthly plan, for a 75% chance.
+        neededTopUp: (() => {
+            const value = quantileOf(sortedTopUps, 0.75);
+            return value === null || !Number.isFinite(value) ? null : Math.ceil(value / 1000) * 1000;
+        })(),
+        // How far short the paths that miss end up.
+        shortfall: {
+            probability: 1 - reached / paths,
+            median: gaps.length ? round(quantileOf(gaps, 0.5), 0) : 0,
+            // The bottom-10% outcome's gap to the target.
+            badCase: round(Math.max(0, target - quantileOf(sortedFinals, 0.1)), 0)
+        },
         flatRate: { rate: flatRate, value: round(flat, 0) },
         fan: yearMarks.map((m, i) => {
             const sorted = [...marks[i]].sort((a, b) => a - b);
@@ -410,6 +427,9 @@ function sipDateStudy(series, { years = 5, amount = 10000, minMonths = 24 } = {}
 
 module.exports = {
     seededRandom,
+    hashSeed,
+    quantileOf,
+    monthsBetween,
     monthlyReturns,
     simulateGoal,
     financialYear,

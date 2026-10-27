@@ -23,8 +23,8 @@ export function HoldingDetail() {
 
   return (
     <>
-      <Link to="/investments" className="row small ink-2" style={{ gap: 6, textDecoration: "none", marginBottom: 18, display: "inline-flex" }}>
-        <ArrowLeft size={14} /> Investments
+      <Link to="/investments/holdings" className="row small ink-2" style={{ gap: 6, textDecoration: "none", marginBottom: 18, display: "inline-flex" }}>
+        <ArrowLeft size={14} /> Holdings
       </Link>
 
       {query.isPending && (

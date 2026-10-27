@@ -5,9 +5,11 @@
 const User = require("../models/User");
 const Investment = require("../models/Investment");
 const NotificationLog = require("../models/NotificationLog");
+const Alert = require("../models/Alert");
 const sendEmail = require("./mail");
 const navStore = require("./navStore");
 const { buildPortfolio } = require("./portfolio");
+const analytics = require("./analytics");
 const { addDays } = require("../utils/time");
 
 // No emails before this hour (IST): the first NAV sync runs just after midnight.
@@ -22,14 +24,15 @@ function marketHour(now) {
 
 // Sends once per key. The key is claimed first (the unique index stops a
 // second instance or run), and released again if the email didn't go out, so
-// a later run retries it.
+// a later run retries it. Returns "sent", "duplicate" or "skipped" (email
+// isn't configured).
 async function sendOnce(user, key, subject, body) {
     const userId = String(user._id);
 
     try {
         await NotificationLog.create({ userId, key });
     } catch (error) {
-        if (error.code === 11000) return; // already sent
+        if (error.code === 11000) return "duplicate"; // already sent
         throw error;
     }
 
@@ -44,7 +47,9 @@ async function sendOnce(user, key, subject, body) {
     // Not configured (e.g. development): nothing was sent, so don't record it.
     if (result.skipped) {
         await NotificationLog.deleteOne({ userId, key });
+        return "skipped";
     }
+    return "sent";
 }
 
 async function notifyUser(user, now) {
@@ -79,6 +84,32 @@ async function notifyUser(user, now) {
             `Book ${inr(data.harvest.gainBooked)} of gains tax-free before 31 March`,
             `This year's ₹1.25 lakh exemption doesn't carry forward. It would avoid about ${inr(data.harvest.taxAvoided)} of tax later.`);
     }
+
+    // 4. Alerts: today's snapshot, then any alert that opened and hasn't been
+    // emailed. They're recorded (and shown in the app) even with emails off.
+    const fresh = await analytics.refreshAlerts(String(user._id), now);
+    if (prefs.alerts !== false) {
+        for (const alert of fresh) {
+            const outcome = await sendOnce(user, `alert:${alert._id}:${alert.firstSeenAt.toISOString().slice(0, 10)}`, alert.title, alertEmail(alert));
+            if (outcome !== "skipped") {
+                await Alert.updateOne({ _id: alert._id, notifiedAt: null }, { $set: { notifiedAt: new Date() } });
+            }
+        }
+    }
+}
+
+// Why it fired, the data, and what to look into, as plain text.
+function alertEmail(alert) {
+    const table = alert.evidence?.rows?.length
+        ? alert.evidence.rows.map(row => `  ${row.join("  ·  ")}`).join("\n")
+        : "";
+    return [
+        alert.why,
+        alert.period?.from ? `\nPeriod: ${alert.period.from} to ${alert.period.to}` : "",
+        table ? `\n${alert.evidence.columns.join("  ·  ")}\n${table}` : "",
+        alert.investigate.length ? `\nWhat to look into:\n${alert.investigate.map(item => `  - ${item}`).join("\n")}` : "",
+        "\nFor tracking only — not investment advice."
+    ].join("\n");
 }
 
 // Runs for every user who holds funds; one user's failure doesn't stop the rest.

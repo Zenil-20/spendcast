@@ -7,6 +7,7 @@ const { readBody, isMissing, readText, readObjectId, readDateString } = require(
 const { addDays } = require('../utils/time');
 const navStore = require('../services/navStore');
 const { evaluateGoals } = require('../services/goals');
+const { recordGoals } = require('../services/analytics');
 
 const MAX_GOALS = 20;
 const MAX_TARGET = 1e11;
@@ -61,8 +62,12 @@ async function findGoal(req) {
 
 // GET /goals
 async function listGoals(req, res) {
+    const now = getNow(req);
     const goals = await Goal.find({ userId: req.user.id }).sort({ targetDate: 1 }).lean();
-    res.status(200).json({ success: true, goals: await evaluateGoals(req.user.id, goals, getNow(req)) });
+    const evaluated = await evaluateGoals(req.user.id, goals, now);
+    // Today's odds feed the trend; a failed write shouldn't fail the page.
+    await recordGoals(req.user.id, now, evaluated).catch(error => console.error('[goals] Snapshot failed:', error.message));
+    res.status(200).json({ success: true, goals: evaluated });
 }
 
 // POST /goals/preview — the odds for a goal without saving it.

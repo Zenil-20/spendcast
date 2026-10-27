@@ -305,7 +305,7 @@ function buildInsights({ holdings, totals, tax, sips, harvest, today }) {
             id: "harvest",
             tone: "positive",
             title: `Book ${inr(harvest.gainBooked)} of gains tax-free before 31 March`,
-            detail: `Selling and buying back these units uses this year's ₹1.25 lakh exemption, which doesn't carry forward. It avoids about ${inr(harvest.taxAvoided)} of tax later. See Analysis → Tax.`
+            detail: `Selling and buying back these units uses this year's ₹1.25 lakh exemption, which doesn't carry forward. It avoids about ${inr(harvest.taxAvoided)} of tax later. See Planning → Tax.`
         });
     }
 

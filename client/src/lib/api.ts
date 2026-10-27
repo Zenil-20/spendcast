@@ -1,6 +1,12 @@
 import type {
   Budget,
+  CandidateCheck,
   ChartPreset,
+  HealthResponse,
+  InvestmentProfile,
+  Overlap,
+  PortfolioAlert,
+  ProjectionResponse,
   ChartRange,
   FundSeries,
   Goal,
@@ -162,5 +168,16 @@ export const api = {
   createInvestment: (input: InvestmentInput) => request<HoldingDetail & { investmentId: string }>("POST", "/investments", input),
   updateInvestment: (id: string, changes: Partial<InvestmentInput> & { isActive?: boolean; skippedDates?: string[] }) =>
     request<HoldingDetail>("PATCH", `/investments/${id}`, changes),
-  deleteInvestment: (id: string) => request<{ schemeCode: number; remaining: number }>("DELETE", `/investments/${id}`)
+  deleteInvestment: (id: string) => request<{ schemeCode: number; remaining: number }>("DELETE", `/investments/${id}`),
+
+  overlap: () => request<Overlap>("GET", "/portfolio/overlap"),
+  checkCandidate: (schemeCode: number, amount?: number) =>
+    request<CandidateCheck>("POST", "/portfolio/overlap/candidate", amount ? { schemeCode, amount } : { schemeCode }),
+  projection: (extra: number) => request<ProjectionResponse>("GET", "/portfolio/projection", undefined, { extra: extra ? String(extra) : undefined }),
+  health: () => request<HealthResponse>("GET", "/portfolio/health"),
+  profile: () => request<{ profile: InvestmentProfile }>("GET", "/portfolio/profile").then(result => result.profile),
+  saveProfile: (profile: InvestmentProfile) => request<{ profile: InvestmentProfile }>("PUT", "/portfolio/profile", profile).then(result => result.profile),
+  alerts: () => request<{ alerts: PortfolioAlert[] }>("GET", "/alerts").then(result => result.alerts),
+  updateAlert: (id: string, status: "dismissed" | "open") =>
+    request<{ alert: PortfolioAlert }>("PATCH", `/alerts/${id}`, { status }).then(result => result.alert)
 };

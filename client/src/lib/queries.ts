@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "./api";
-import type { ChartPreset, ChartRange, GoalInput, InvestmentInput, NewExpense, NewRecurringExpense } from "./types";
+import type { ChartPreset, ChartRange, GoalInput, InvestmentInput, InvestmentProfile, NewExpense, NewRecurringExpense } from "./types";
 
 // Query keys. Anything that changes spending also invalidates the forecast.
 export const keys = {
@@ -112,7 +112,7 @@ export function useSaveGoal() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: ({ id, input }: { id: string | null; input: GoalInput }) => (id ? api.updateGoal(id, input) : api.createGoal(input)),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["goals"] })
+    onSuccess: () => Promise.all([queryClient.invalidateQueries({ queryKey: ["goals"] }), queryClient.invalidateQueries({ queryKey: ["analytics"] })])
   });
 }
 
@@ -120,7 +120,7 @@ export function useDeleteGoal() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (id: string) => api.deleteGoal(id),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["goals"] })
+    onSuccess: () => Promise.all([queryClient.invalidateQueries({ queryKey: ["goals"] }), queryClient.invalidateQueries({ queryKey: ["analytics"] })])
   });
 }
 
@@ -184,8 +184,61 @@ function useInvalidateInvestments() {
     queryClient.invalidateQueries({ queryKey: ["holding"] }),
     queryClient.invalidateQueries({ queryKey: ["fund-series"] }),
     queryClient.invalidateQueries({ queryKey: ["goals"] }),
-    queryClient.invalidateQueries({ queryKey: ["harvest"] })
+    queryClient.invalidateQueries({ queryKey: ["harvest"] }),
+    queryClient.invalidateQueries({ queryKey: ["analytics"] })
   ]);
+}
+
+/* ---------- Portfolio analytics ---------- */
+
+// All under ["analytics", ...] so a change to investments refreshes them together.
+export function useOverlap(enabled = true) {
+  return useQuery({ queryKey: ["analytics", "overlap"], queryFn: api.overlap, enabled, staleTime: 5 * 60_000 });
+}
+
+export function useCandidateCheck() {
+  return useMutation({ mutationFn: ({ schemeCode, amount }: { schemeCode: number; amount?: number }) => api.checkCandidate(schemeCode, amount) });
+}
+
+// The forecast for a changed monthly SIP total; `extra` 0 is the current plan.
+export function useProjection(extra: number) {
+  return useQuery({
+    queryKey: ["analytics", "projection", extra],
+    queryFn: () => api.projection(extra),
+    staleTime: 5 * 60_000,
+    placeholderData: previous => previous
+  });
+}
+
+export function useHealth() {
+  return useQuery({ queryKey: ["analytics", "health"], queryFn: api.health, staleTime: 5 * 60_000 });
+}
+
+export function useProfile() {
+  return useQuery({ queryKey: ["profile"], queryFn: api.profile });
+}
+
+export function useSaveProfile() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (profile: InvestmentProfile) => api.saveProfile(profile),
+    onSuccess: profile => {
+      queryClient.setQueryData(["profile"], profile);
+      return queryClient.invalidateQueries({ queryKey: ["analytics", "health"] });
+    }
+  });
+}
+
+export function useAlerts() {
+  return useQuery({ queryKey: ["analytics", "alerts"], queryFn: api.alerts, staleTime: 5 * 60_000 });
+}
+
+export function useUpdateAlert() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, status }: { id: string; status: "dismissed" | "open" }) => api.updateAlert(id, status),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["analytics", "alerts"] })
+  });
 }
 
 export function useCreateInvestment() {

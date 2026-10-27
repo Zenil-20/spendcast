@@ -463,6 +463,8 @@ export interface GoalSimulation {
   flatRate: { rate: number; value: number };
   fan: { date: string; p10: number; median: number; p90: number }[];
   history: { from: string; to: string; months: number; paths: number; blockMonths: number; borrowedMonths: number; fundMonths: number[] };
+  neededTopUp: number | null;
+  shortfall: { probability: number; median: number; badCase: number };
 }
 
 export interface GoalInput {
@@ -483,6 +485,7 @@ export interface Goal extends GoalInput {
   effectiveMonthly: number;
   benchmarkName: string | null;
   simulation: GoalSimulation | null;
+  watch: GoalWatch | null;
 }
 
 export interface Portfolio {
@@ -564,4 +567,196 @@ export interface InvestmentPreview {
   shiftedCount: number;
   firstAllotment: Installment | null;
   lastAllotment: Installment | null;
+}
+
+/* ---------- Goal early warning ---------- */
+
+export type GoalStatus = "on_track" | "at_risk" | "off_track";
+
+export type GoalFixOption =
+  | { kind: "monthly"; amount: number; monthly: number }
+  | { kind: "topUp"; amount: number }
+  | { kind: "extend"; months: number; date: string | null };
+
+export interface GoalWatch {
+  status: GoalStatus;
+  probability: number;
+  trend: { from: string | null; previous: number | null; change: number | null; behindDays: number };
+  fix: { odds: number; primary: GoalFixOption["kind"] | null; options: GoalFixOption[] } | null;
+}
+
+/* ---------- Overlap ---------- */
+
+export interface FundRef {
+  schemeCode: number;
+  shortName: string;
+}
+
+export interface ExposureFund extends FundRef {
+  weight: number;
+  amount: number;
+}
+
+export interface CompanyExposure {
+  key: string;
+  isin: string | null;
+  name: string;
+  sector: string | null;
+  assetType: "equity" | "debt" | "other";
+  amount: number;
+  share: number;
+  portfolioShare: number;
+  funds: ExposureFund[];
+}
+
+export interface SectorExposure {
+  sector: string;
+  amount: number;
+  share: number;
+  duplicated: boolean;
+  heavyFunds: number;
+  funds: ExposureFund[];
+}
+
+export interface FundPairOverlap {
+  a: FundRef;
+  b: FundRef;
+  overlap: number;
+  commonCount: number;
+  topShared: string[];
+}
+
+export interface FundCorrelation {
+  a: FundRef;
+  b: FundRef;
+  correlation: number | null;
+  months: number;
+  label: string;
+}
+
+export interface Overlap {
+  asOf: string;
+  method: "holdings" | "partial" | "returns";
+  summary: string[];
+  coverage: {
+    value: number;
+    total: number;
+    share: number;
+    funds: (FundRef & { asOf: string; stale: boolean })[];
+    missing: (FundRef & { value: number })[];
+  };
+  companyCount: number;
+  companies: CompanyExposure[];
+  common: CompanyExposure[];
+  commonCount: number;
+  commonShare: number;
+  sectors: SectorExposure[];
+  pairs: FundPairOverlap[];
+  cash: { label: string; amount: number; share: number };
+  concentration: { hhi: number | null; effectiveHoldings: number | null; top10Share: number | null; largest: { name: string; share: number; funds: number } | null };
+  correlations: FundCorrelation[];
+}
+
+export interface CandidateCheck {
+  schemeCode: number;
+  shortName: string;
+  amount: number;
+  alreadyHeld: boolean;
+  method: "holdings" | "returns" | "none";
+  verdict: "improves" | "marginal" | "duplicates" | "unknown";
+  reasons: string[];
+  correlation?: number | null;
+  overlapWithPortfolio?: number;
+  newHoldings?: number;
+  effectiveHoldings?: { before: number; after: number; change: number | null };
+}
+
+/* ---------- Forecast ---------- */
+
+export interface ProjectionHorizon {
+  months: number;
+  date: string;
+  contributed: number;
+  invested: number;
+  pessimistic: number;
+  baseline: number;
+  optimistic: number;
+  p25: number;
+  p75: number;
+  lossProbability: number;
+}
+
+export interface Projection {
+  asOf: string;
+  current: number;
+  currentMonthly: number;
+  monthly: number;
+  change: number;
+  horizons: ProjectionHorizon[];
+  fan: { date: string; p10: number; p25: number; median: number; p75: number; p90: number }[];
+  sensitivity: { months: number; rows: { monthly: number; change: number; pessimistic: number; baseline: number; optimistic: number }[] };
+  assumptions: {
+    history: { from: string; to: string; months: number; paths: number; blockMonths: number };
+    funds: (FundRef & { borrowedMonths: number; missRate: number; upcomingInstallments: number; missed: number; scheduled: number })[];
+    stepUpsIncluded: boolean;
+    contributionTiming: string;
+    excludes: string[];
+  };
+}
+
+export interface ProjectionResponse {
+  asOf: string;
+  benchmarkName?: string | null;
+  projection: Projection | null;
+  reason?: string;
+}
+
+/* ---------- Health ---------- */
+
+export type HealthFactorKey = "concentration" | "overlap" | "riskVsHorizon" | "cost" | "benchmarkRelative" | "allocationDrift";
+
+export interface HealthFactor {
+  key: HealthFactorKey;
+  label: string;
+  weight: number;
+  score: number | null;
+  reason?: string;
+  evidence: string[];
+}
+
+export interface HealthChange {
+  date: string;
+  from: number;
+  to: number;
+  change: number;
+  reasons: { key: HealthFactorKey; label: string; impact: number; text: string; details: string[] }[];
+}
+
+export interface InvestmentProfile {
+  horizonYears: number | null;
+  targetAllocation: { equity: number; debt: number; hybrid: number; other: number } | null;
+}
+
+export interface HealthResponse {
+  asOf: string;
+  health: { score: number | null; grade: string | null; coverage: number; factors: HealthFactor[] } | null;
+  changes: { sinceLast: HealthChange | null; sinceMonth: HealthChange | null } | null;
+}
+
+/* ---------- Alerts ---------- */
+
+export interface PortfolioAlert {
+  id: string;
+  key: string;
+  type: "underperformance" | "concentration" | "goal" | "reconcile";
+  severity: "info" | "warning";
+  status: "open" | "dismissed" | "resolved";
+  title: string;
+  why: string;
+  period: { from?: string; to?: string } | null;
+  evidence: { columns: string[]; rows: string[][] } | null;
+  investigate: string[];
+  link: string | null;
+  firstSeenAt: string;
+  lastSeenAt: string;
 }

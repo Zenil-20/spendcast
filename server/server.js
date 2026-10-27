@@ -12,6 +12,7 @@ const userRouter = require('./routes/UserRoute');
 const expenseRouter = require('./routes/ExpenseRoute');
 const mutualFundRouter = require('./routes/MutualFundRoute');
 const goalRouter = require('./routes/GoalRoute');
+const analyticsRouter = require('./routes/AnalyticsRoute');
 const { startNavScheduler } = require('./services/navStore');
 const { notFound, errorHandler } = require('./middleware/errorHandler');
 
@@ -29,6 +30,7 @@ app.use('/api/v1', userRouter);
 app.use('/api/v1', expenseRouter);
 app.use('/api/v1', mutualFundRouter);
 app.use('/api/v1', goalRouter);
+app.use('/api/v1', analyticsRouter);
 
 // The React client (../client), once built with `npm run build`, is served
 // from the same origin, so no CORS setup is needed. Unknown non-API paths

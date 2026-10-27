@@ -8,8 +8,9 @@ import { Dashboard } from "./pages/Dashboard";
 import { Expenses } from "./pages/Expenses";
 import { Recurring } from "./pages/Recurring";
 import { Settings } from "./pages/Settings";
-import { Investments } from "./pages/Investments";
 import { HoldingDetail } from "./pages/HoldingDetail";
+import { InvestmentsLayout, SectionPage } from "./pages/investments/InvestmentsLayout";
+import { ALL_SECTIONS, MOVED } from "./pages/investments/sections";
 
 function Splash() {
   return (
@@ -45,8 +46,15 @@ export function App() {
         <Route path="ledger" element={<Expenses />} />
         <Route path="expenses" element={<Navigate to="/ledger" replace />} />
         <Route path="recurring" element={<Recurring />} />
-        <Route path="investments" element={<Investments />} />
-        <Route path="investments/:id" element={<HoldingDetail />} />
+        <Route path="investments" element={<InvestmentsLayout />}>
+          {ALL_SECTIONS.map(section => section.path
+            ? <Route key={section.path} path={section.path} element={<SectionPage section={section} />} />
+            : <Route key="overview" index element={<SectionPage section={section} />} />)}
+          {/* Sections that were merged into another page. */}
+          {Object.entries(MOVED).map(([path, to]) => <Route key={path} path={path} element={<Navigate to={to} replace />} />)}
+          {/* A fund's own page; named sections above take precedence over :id. */}
+          <Route path=":id" element={<HoldingDetail />} />
+        </Route>
         <Route path="settings" element={<Settings />} />
         <Route
           path="*"

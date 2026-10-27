@@ -55,11 +55,36 @@ const userSchema = new mongoose.Schema(
                 {
                     dailyDigest: { type: Boolean, default: true },
                     sipReminders: { type: Boolean, default: true },
-                    taxReminders: { type: Boolean, default: true }
+                    taxReminders: { type: Boolean, default: true },
+                    alerts: { type: Boolean, default: true }
                 },
                 { _id: false }
             ),
             default: () => ({})
+        },
+        // What the health score measures risk and drift against. Both optional.
+        investmentProfile: {
+            type: new mongoose.Schema(
+                {
+                    // When the money is needed, in years.
+                    horizonYears: { type: Number, min: 0.25, max: 50, default: null },
+                    // Target share of each asset class, as fractions adding up to 1.
+                    targetAllocation: {
+                        type: new mongoose.Schema(
+                            {
+                                equity: { type: Number, min: 0, max: 1, required: true },
+                                debt: { type: Number, min: 0, max: 1, required: true },
+                                hybrid: { type: Number, min: 0, max: 1, required: true },
+                                other: { type: Number, min: 0, max: 1, required: true }
+                            },
+                            { _id: false }
+                        ),
+                        default: null
+                    }
+                },
+                { _id: false }
+            ),
+            default: null
         },
 
         // A requested change that takes effect at `effectiveAt` (the next local
